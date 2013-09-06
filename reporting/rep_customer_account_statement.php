@@ -31,19 +31,19 @@ print_statements();
 //----------------------------------------------------------------------------------------------------
 
 function getInitialBalance($debtorno, $date) {
-    $sql = "SELECT SUM (".TB_PREF."debtor_trans.ov_amount + ".TB_PREF."debtor_trans.ov_gst + ".TB_PREF."debtor_trans.ov_freight +
-				".TB_PREF."debtor_trans.ov_freight_tax + ".TB_PREF."debtor_trans.ov_discount)*IF(".TB_PREF."debtor_trans.type in (".ST_SALESINVOICE."), 1, -1) AS balance
+    $sql = "SELECT SUM((".TB_PREF."debtor_trans.ov_amount + ".TB_PREF."debtor_trans.ov_gst + ".TB_PREF."debtor_trans.ov_freight +
+				".TB_PREF."debtor_trans.ov_freight_tax + ".TB_PREF."debtor_trans.ov_discount)*IF(".TB_PREF."debtor_trans.type in (".ST_SALESINVOICE."), 1, -1)) AS balance
 				FROM ".TB_PREF."debtor_trans
-				WHERE ".TB_PREF."debtor_trans.tran_date < '$start' AND ".TB_PREF."debtor_trans.debtor_no = ".db_escape($debtorno)."
+				WHERE GREATEST(".TB_PREF."debtor_trans.tran_date, ".TB_PREF."debtor_trans.due_date) < '$date' AND ".TB_PREF."debtor_trans.debtor_no = ".db_escape($debtorno)."
     				AND ".TB_PREF."debtor_trans.type <> ".ST_CUSTDELIVERY;
 		$result = db_query($sql);
 		$row = db_fetch($result);
-		return $row['balance'];
+		return $row ? $row['balance'] : 0;
 
 
 
 }
-function getTransactions($debtorno, $start,  $date, $show_also_allocated)
+function getTransactions($debtorno, $start,  $date)
 {
 	$sql = "SELECT ".TB_PREF."debtor_trans.*,
 		(".TB_PREF."debtor_trans.ov_amount + ".TB_PREF."debtor_trans.ov_gst + ".TB_PREF."debtor_trans.ov_freight +
@@ -53,7 +53,7 @@ function getTransactions($debtorno, $start,  $date, $show_also_allocated)
 		OR ".TB_PREF."debtor_trans.due_date < '$date') AS OverDue,
 		IF(due_date = '0000-00-00' , tran_date, due_date) AS EffectiveDate
 		FROM ".TB_PREF."debtor_trans
-		WHERE ".TB_PREF."debtor_trans.tran_date >= '$start' AND ".TB_PREF."debtor_trans.debtor_no = ".db_escape($debtorno)."
+		WHERE GREATEST(".TB_PREF."debtor_trans.tran_date, ".TB_PREF."debtor_trans.due_date) >= '$start' AND ".TB_PREF."debtor_trans.debtor_no = ".db_escape($debtorno)."
 		AND ".TB_PREF."debtor_trans.type <> ".ST_CUSTDELIVERY."
 		AND ABS(".TB_PREF."debtor_trans.ov_amount + ".TB_PREF."debtor_trans.ov_gst + ".TB_PREF."debtor_trans.ov_freight +
 		".TB_PREF."debtor_trans.ov_freight_tax + ".TB_PREF."debtor_trans.ov_discount) > 1e-6";
@@ -111,7 +111,7 @@ function print_statements()
 
 		$debtor_row['order_'] = "";
 
-		$TransResult = getTransactions($debtor_row['debtor_no'], $start,  $date, $show_also_allocated);
+		$TransResult = getTransactions($debtor_row['debtor_no'], $start,  $date);
 		$baccount = get_default_bank_account($debtor_row['curr_code']);
 		$params['bankaccount'] = $baccount['id'];
 		if (db_num_rows($TransResult) == 0)
@@ -145,6 +145,14 @@ function print_statements()
 
 		$current = false;
 		$balance = getInitialBalance($debtor_row['debtor_no'], $start);
+		if(Abs($balance) > 1e-6) {
+			// Display initial balance
+			$rep->TextCol(1, 4, 'Balance Brough Forward');
+			if($balance > 0) $rep->SetTextColor(190, 0, 0);
+			$rep->TextCol(6, 7,	number_format2(-$balance, $dec), -2);
+			$rep->SetTextColor(0, 0, 0);
+			$rep->NewLine();
+		}
 		$overdue = 0;
 		while ($transaction_row=db_fetch($TransResult))
 		{
