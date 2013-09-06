@@ -148,7 +148,7 @@
 				_("Supplier's Reference") => '',
 				_("Due Date") => sql2date($this->formData['tran_date']),
 			);
-			$this->headers = array(_("Trans Type"), _("#"), _("Date"), _("Due Date"), _("Total Amount"), _("Left to Allocate"), _("This Allocation"));
+			$this->headers = array(_("Transaction"), _("#"), _("Date"), _("Due Date"), _("Total Amount"), _("Left to Allocate"), _("This Allocation"));
 			break;
 
 		case ST_PURCHORDER:

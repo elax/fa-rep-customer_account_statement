@@ -29,10 +29,30 @@ include_once($path_to_root . "/includes/db/crm_contacts_db.inc");
 print_statements();
 
 //----------------------------------------------------------------------------------------------------
+function amountSQL() {
+		return "(".TB_PREF."debtor_trans.ov_amount + ".TB_PREF."debtor_trans.ov_gst + ".TB_PREF."debtor_trans.ov_freight +
+				".TB_PREF."debtor_trans.ov_freight_tax + ".TB_PREF."debtor_trans.ov_discount)*IF(".TB_PREF."debtor_trans.type in (".ST_SALESINVOICE."), 1, -1)"; 
+}
+
+function findLatestNullDate($debtorno, $default) {
+	db_query("SELECT @balance:=0");
+	$sql = "SELECT MAX(date)+ INTERVAL 1 DAY  AS date FROM ( SELECT @balance := @balance+".amountSQL()." AS balance,
+					GREATEST(tran_date, due_date) AS date
+					FROM   ".TB_PREF."debtor_trans WHERE ".TB_PREF."debtor_trans.debtor_no = ".db_escape($debtorno)."
+    				AND ".TB_PREF."debtor_trans.type <> ".ST_CUSTDELIVERY."
+					ORDER BY GREATEST(tran_date, due_date)
+					) b WHERE ABS(balance) < 1e-6
+		";
+
+		$result = db_query($sql);
+		$row = db_fetch($result);
+		return $row ? $row['date'] : $default;
+	
+	
+}
 
 function getInitialBalance($debtorno, $date) {
-    $sql = "SELECT SUM((".TB_PREF."debtor_trans.ov_amount + ".TB_PREF."debtor_trans.ov_gst + ".TB_PREF."debtor_trans.ov_freight +
-				".TB_PREF."debtor_trans.ov_freight_tax + ".TB_PREF."debtor_trans.ov_discount)*IF(".TB_PREF."debtor_trans.type in (".ST_SALESINVOICE."), 1, -1)) AS balance
+    $sql = "SELECT SUM(".amountSQL().") AS balance
 				FROM ".TB_PREF."debtor_trans
 				WHERE GREATEST(".TB_PREF."debtor_trans.tran_date, ".TB_PREF."debtor_trans.due_date) < '$date' AND ".TB_PREF."debtor_trans.debtor_no = ".db_escape($debtorno)."
     				AND ".TB_PREF."debtor_trans.type <> ".ST_CUSTDELIVERY;
@@ -46,8 +66,7 @@ function getInitialBalance($debtorno, $date) {
 function getTransactions($debtorno, $start,  $date)
 {
 	$sql = "SELECT ".TB_PREF."debtor_trans.*,
-		(".TB_PREF."debtor_trans.ov_amount + ".TB_PREF."debtor_trans.ov_gst + ".TB_PREF."debtor_trans.ov_freight +
-		".TB_PREF."debtor_trans.ov_freight_tax + ".TB_PREF."debtor_trans.ov_discount)*if(".TB_PREF."debtor_trans.type in (".ST_SALESINVOICE."), 1, -1)
+		".amountSQL()."
 		AS TotalAmount, ".TB_PREF."debtor_trans.alloc AS Allocated,
 		((".TB_PREF."debtor_trans.type != ".ST_SALESINVOICE.")
 		OR ".TB_PREF."debtor_trans.due_date < '$date') AS OverDue,
@@ -71,9 +90,9 @@ function print_statements()
 	include_once($path_to_root . "/reporting/includes/pdf_report.inc");
 
 	$start = date2sql($_POST['PARAM_0']);
-	$customer = $_POST['PARAM_1'];
-	$currency = $_POST['PARAM_2'];
-	$show_balanced = $_POST['PARAM_3'];
+	$last_null = !$_POST['PARAM_1'];
+	$customer = $_POST['PARAM_2'];
+	$currency = $_POST['PARAM_3'];
 	$email = $_POST['PARAM_4'];
 	$comments = $_POST['PARAM_5'];
 	$orientation = $_POST['PARAM_6'];
@@ -109,9 +128,17 @@ function print_statements()
 	{
 		$date = date('Y-m-d');
 
+		if($last_null) {
+		// fin the latest point where the balance was null
+			$start_d = findLatestNullDate($debtor_row['debtor_no'], $start);
+		}
+		else {
+			$start_d = $start;
+		}
+
 		$debtor_row['order_'] = "";
 
-		$TransResult = getTransactions($debtor_row['debtor_no'], $start,  $date);
+		$TransResult = getTransactions($debtor_row['debtor_no'], $start_d,  $date);
 		$baccount = get_default_bank_account($debtor_row['curr_code']);
 		$params['bankaccount'] = $baccount['id'];
 		if (db_num_rows($TransResult) == 0)
@@ -142,13 +169,13 @@ function print_statements()
 		$rep->fontSize -= 2;
 		$rep->NewLine(2);
  */
-
 		$current = false;
-		$balance = getInitialBalance($debtor_row['debtor_no'], $start);
-		if(Abs($balance) > 1e-6) {
+		$balance = getInitialBalance($debtor_row['debtor_no'], $start_d);
+		if(true || Abs($balance) > 1e-6) {
 			// Display initial balance
 			$rep->TextCol(1, 4, 'Balance Brough Forward');
-			if($balance > 0) $rep->SetTextColor(190, 0, 0);
+				if(Abs($balance) < 1e-6) $rep->SetTextColor(190, 190, 190);
+				else if($balance > 0) $rep->SetTextColor(190, 0, 0);
 			$rep->TextCol(6, 7,	number_format2(-$balance, $dec), -2);
 			$rep->SetTextColor(0, 0, 0);
 			$rep->NewLine();
