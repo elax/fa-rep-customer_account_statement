@@ -63,7 +63,7 @@ function getInitialBalance($debtorno, $date) {
 
 
 }
-function getTransactions($debtorno, $start,  $date)
+function getTransactions($debtorno, $from,  $date)
 {
 	$sql = "SELECT ".TB_PREF."debtor_trans.*,
 		".amountSQL()."
@@ -72,7 +72,7 @@ function getTransactions($debtorno, $start,  $date)
 		OR ".TB_PREF."debtor_trans.due_date < '$date') AS OverDue,
 		IF(due_date = '0000-00-00' , tran_date, due_date) AS EffectiveDate
 		FROM ".TB_PREF."debtor_trans
-		WHERE GREATEST(".TB_PREF."debtor_trans.tran_date, ".TB_PREF."debtor_trans.due_date) >= '$start' AND ".TB_PREF."debtor_trans.debtor_no = ".db_escape($debtorno)."
+		WHERE GREATEST(".TB_PREF."debtor_trans.tran_date, ".TB_PREF."debtor_trans.due_date) >= '$from' AND ".TB_PREF."debtor_trans.debtor_no = ".db_escape($debtorno)."
 		AND ".TB_PREF."debtor_trans.type <> ".ST_CUSTDELIVERY."
 		AND ABS(".TB_PREF."debtor_trans.ov_amount + ".TB_PREF."debtor_trans.ov_gst + ".TB_PREF."debtor_trans.ov_freight +
 		".TB_PREF."debtor_trans.ov_freight_tax + ".TB_PREF."debtor_trans.ov_discount) > 1e-6";
@@ -89,8 +89,8 @@ function print_statements()
 
 	include_once($path_to_root . "/reporting/includes/pdf_report.inc");
 
-	$start = date2sql($_POST['PARAM_0']);
-	$last_null = !$_POST['PARAM_1'];
+	$from = date2sql($_POST['PARAM_0']);
+	$to = date2sql($_POST['PARAM_1']);
 	$customer = $_POST['PARAM_2'];
 	$currency = $_POST['PARAM_3'];
 	$email = $_POST['PARAM_4'];
@@ -128,17 +128,24 @@ function print_statements()
 	{
 		$date = date('Y-m-d');
 
-		if($last_null) {
-		// fin the latest point where the balance was null
-			$start_d = findLatestNullDate($debtor_row['debtor_no'], $start);
+		if($from != $to) {
+			// find the latest point where the balance was null
+			$start = findLatestNullDate($debtor_row['debtor_no'], $from);
+			// but not earlier than the $to date.
+			if(date1_greater_date2(sql2date($start), sql2date($to))) {
+				$start = $to;
+			}
+			if(date1_greater_date2(sql2date($from), sql2date($start))) {
+				$start = $from;
+			}
 		}
 		else {
-			$start_d = $start;
+			$start = $from;
 		}
 
 		$debtor_row['order_'] = "";
 
-		$TransResult = getTransactions($debtor_row['debtor_no'], $start_d,  $date);
+		$TransResult = getTransactions($debtor_row['debtor_no'], $start,  $date);
 		$baccount = get_default_bank_account($debtor_row['curr_code']);
 		$params['bankaccount'] = $baccount['id'];
 		if (db_num_rows($TransResult) == 0)
@@ -170,7 +177,7 @@ function print_statements()
 		$rep->NewLine(2);
  */
 		$current = false;
-		$balance = getInitialBalance($debtor_row['debtor_no'], $start_d);
+		$balance = getInitialBalance($debtor_row['debtor_no'], $start);
 		if(true || Abs($balance) > 1e-6) {
 			// Display initial balance
 			$rep->TextCol(1, 4, 'Balance Brough Forward');
@@ -190,7 +197,18 @@ function print_statements()
 				$rep->fontSize -= 2;
 				$current = true;
 				$overdue = $balance;
-				$balance = 0;
+				/* Reset the balance. so we have a separate balance for overdue
+				 * and current. However if the customer is in credit
+				 * don't reset the balance.
+				 * Example : A Customer has made a payment before the invoice
+				 * is overdue. The total balance after the invoice should be 0.
+				 */
+				if($balance >0) {
+						$balance = 0;
+				}
+				else {
+					$overdue = 0;
+				}
 				$rep->NewLine(2);
 			}
 
@@ -208,7 +226,7 @@ function print_statements()
 			$rep->TextCol(2, 2,	$transaction_row['reference'], -2);
 			$rep->TextCol(0, 3,	sql2date($transaction_row['EffectiveDate']), -2);
 			if ($transaction_row['type'] == ST_SALESINVOICE)
-				$rep->TextCol(3, 4,	sql2date($transaction_row['due_date']), -2);
+				$rep->TextCol(3, 4,	sql2date($transaction_row['tran_date']), -2);
 			if ($transaction_row['type'] == ST_SALESINVOICE || $transaction_row['type'] == ST_BANKPAYMENT)
 				$rep->TextCol(4, 5,	$DisplayTotal, -2);
 			else
@@ -237,7 +255,7 @@ function print_statements()
 		$rep->TextCol(5,6,'Total Balance');
 		$rep->TextCol(6,7, number_format2(-($balance+$overdue), $dec));
 
-		if ($overdue > 0) {
+		if ($overdue > 1e-6) {
 		 // $rep->fontSize += 2;
 			$rep->NewLine(2);
 			$rep->SetTextColor(190, 0, 0);
