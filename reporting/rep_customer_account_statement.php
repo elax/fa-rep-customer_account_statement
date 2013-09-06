@@ -141,10 +141,11 @@ function print_statements()
 			if(!$current && !$transaction_row['OverDue']==true) {
 		$rep->fontSize += 2;
 				$rep->NewLine(2);
-		$rep->TextCol(0, 7, _("Coming up"));
+		$rep->TextCol(0, 7, _("Due Soon"));
 		$rep->fontSize -= 2;
 				$current = true;
 				$overdue = $balance;
+				$balance = 0;
 				$rep->NewLine(2);
 			}
 
@@ -173,24 +174,28 @@ function print_statements()
 			if ($rep->row < $rep->bottomMargin + (10 * $rep->lineHeight))
 				$rep->NewPage();
 		}
+
+		// Total
+		$rep->NewLine();
+		$rep->SetTextColor(0, 0, 0);
+			$rep->fontSize += 2;
+		$rep->TextCol(5,6,'Total Balance');
+		$rep->TextCol(6,7, number_format2(-($balance+$overdue), $dec));
 		if ($overdue > 0) {
-			if ($rep->row < $rep->bottomMargin + (10 * $rep->lineHeight))
-				$rep->NewPage();
-			else
-				$rep->NewLIne(2);
 			$rep->fontSize += 2;
-			$rep->SetTextColor(0, 0, 0);
-			$rep->TextCol(1,3, 'Overdue Amount:');
-			$rep->TextCol(3,4, number_format2($overdue, $dec)) ;
-			$rep->NewLine(2);
-			$rep->fontSize += 2;
+				$rep->NewLine(2);
 			$rep->SetTextColor(190, 0, 0);
-			$rep->TextCol(2,5, 'Please paye ASAP');
+		$rep->TextCol(5,6,'Overdue');
+		$rep->TextCol(6,7,number_format2($overdue, $dec));
+			$rep->TextCol(2,5, 'PLEASE PAY NOW');
 			$rep->fontSize -= 4;
 			$rep->SetTextColor(0, 0, 0);
 		$rep->NewLine();
 		}
+			$rep->fontSize -= 2;
+		
 
+/*
 		$nowdue = "1-" . $PastDueDays1 . " " . _("Days");
 		$pastdue1 = $PastDueDays1 + 1 . "-" . $PastDueDays2 . " " . _("Days");
 		$pastdue2 = _("Over") . " " . $PastDueDays2 . " " . _("Days");
@@ -209,6 +214,7 @@ function print_statements()
 		$rep->NewLine();
 		for ($i = 0; $i < 5; $i++)
 			$rep->TextWrap($col[$i], $rep->row, $col[$i + 1] - $col[$i], $str2[$i], 'right');
+*/
 		if ($email == 1)
 			$rep->End($email, _("Statement") . " " . _("as of") . " " . sql2date($date));
 
