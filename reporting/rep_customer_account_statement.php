@@ -30,27 +30,36 @@ print_statements();
 
 //----------------------------------------------------------------------------------------------------
 
-function overdueBreak($rep, $balance) {
-}
-function getTransactions($debtorno, $date, $show_also_allocated)
-{
-$date = '2013/03/08';
-$start = '2000/01/01';
-    $sql = "SELECT ".TB_PREF."debtor_trans.*,
-				(".TB_PREF."debtor_trans.ov_amount + ".TB_PREF."debtor_trans.ov_gst + ".TB_PREF."debtor_trans.ov_freight +
-				".TB_PREF."debtor_trans.ov_freight_tax + ".TB_PREF."debtor_trans.ov_discount)*if(".TB_PREF."debtor_trans.type in (".ST_SALESINVOICE."), 1, -1)
-				AS TotalAmount, ".TB_PREF."debtor_trans.alloc AS Allocated,
-				((".TB_PREF."debtor_trans.type != ".ST_SALESINVOICE.")
-				OR ".TB_PREF."debtor_trans.due_date < '$date') AS OverDue,
-				IF(due_date = '0000-00-00' , tran_date, due_date) AS EffectiveDate
+function getInitialBalance($debtorno, $date) {
+    $sql = "SELECT SUM (".TB_PREF."debtor_trans.ov_amount + ".TB_PREF."debtor_trans.ov_gst + ".TB_PREF."debtor_trans.ov_freight +
+				".TB_PREF."debtor_trans.ov_freight_tax + ".TB_PREF."debtor_trans.ov_discount)*IF(".TB_PREF."debtor_trans.type in (".ST_SALESINVOICE."), 1, -1) AS balance
 				FROM ".TB_PREF."debtor_trans
-				WHERE ".TB_PREF."debtor_trans.tran_date >= '$start' AND ".TB_PREF."debtor_trans.debtor_no = ".db_escape($debtorno)."
-    				AND ".TB_PREF."debtor_trans.type <> ".ST_CUSTDELIVERY."
-					AND ABS(".TB_PREF."debtor_trans.ov_amount + ".TB_PREF."debtor_trans.ov_gst + ".TB_PREF."debtor_trans.ov_freight +
-				".TB_PREF."debtor_trans.ov_freight_tax + ".TB_PREF."debtor_trans.ov_discount) > 1e-6";
+				WHERE ".TB_PREF."debtor_trans.tran_date < '$start' AND ".TB_PREF."debtor_trans.debtor_no = ".db_escape($debtorno)."
+    				AND ".TB_PREF."debtor_trans.type <> ".ST_CUSTDELIVERY;
+		$result = db_query($sql);
+		$row = db_fetch($result);
+		return $row['balance'];
+
+
+
+}
+function getTransactions($debtorno, $start,  $date, $show_also_allocated)
+{
+	$sql = "SELECT ".TB_PREF."debtor_trans.*,
+		(".TB_PREF."debtor_trans.ov_amount + ".TB_PREF."debtor_trans.ov_gst + ".TB_PREF."debtor_trans.ov_freight +
+		".TB_PREF."debtor_trans.ov_freight_tax + ".TB_PREF."debtor_trans.ov_discount)*if(".TB_PREF."debtor_trans.type in (".ST_SALESINVOICE."), 1, -1)
+		AS TotalAmount, ".TB_PREF."debtor_trans.alloc AS Allocated,
+		((".TB_PREF."debtor_trans.type != ".ST_SALESINVOICE.")
+		OR ".TB_PREF."debtor_trans.due_date < '$date') AS OverDue,
+		IF(due_date = '0000-00-00' , tran_date, due_date) AS EffectiveDate
+		FROM ".TB_PREF."debtor_trans
+		WHERE ".TB_PREF."debtor_trans.tran_date >= '$start' AND ".TB_PREF."debtor_trans.debtor_no = ".db_escape($debtorno)."
+		AND ".TB_PREF."debtor_trans.type <> ".ST_CUSTDELIVERY."
+		AND ABS(".TB_PREF."debtor_trans.ov_amount + ".TB_PREF."debtor_trans.ov_gst + ".TB_PREF."debtor_trans.ov_freight +
+		".TB_PREF."debtor_trans.ov_freight_tax + ".TB_PREF."debtor_trans.ov_discount) > 1e-6";
 	$sql .= " ORDER BY IF(due_date = '0000-00-00' , tran_date, due_date)";
 
-    return db_query($sql,"No transactions were returned");
+	return db_query($sql,"No transactions were returned");
 }
 
 //----------------------------------------------------------------------------------------------------
@@ -61,12 +70,13 @@ function print_statements()
 
 	include_once($path_to_root . "/reporting/includes/pdf_report.inc");
 
-	$customer = $_POST['PARAM_0'];
-	$currency = $_POST['PARAM_1'];
-	$show_also_allocated = $_POST['PARAM_2'];
-	$email = $_POST['PARAM_3'];
-	$comments = $_POST['PARAM_4'];
-	$orientation = $_POST['PARAM_5'];
+	$start = date2sql($_POST['PARAM_0']);
+	$customer = $_POST['PARAM_1'];
+	$currency = $_POST['PARAM_2'];
+	$show_balanced = $_POST['PARAM_3'];
+	$email = $_POST['PARAM_4'];
+	$comments = $_POST['PARAM_5'];
+	$orientation = $_POST['PARAM_6'];
 
 	$orientation = ($orientation ? 'L' : 'P');
 	$dec = user_price_dec();
@@ -85,9 +95,9 @@ function print_statements()
 
 	if ($email == 0)
 		$rep = new FrontReport(_('STATEMENT'), "StatementBulk", user_pagesize(), 9, $orientation);
-   if ($orientation == 'L')
-    	recalculate_cols($cols);
- 
+	if ($orientation == 'L')
+		recalculate_cols($cols);
+
 	$sql = "SELECT debtor_no, name AS DebtorName, address, tax_id, curr_code, curdate() AS tran_date FROM ".TB_PREF."debtors_master";
 	if ($customer != ALL_TEXT)
 		$sql .= " WHERE debtor_no = ".db_escape($customer);
@@ -101,7 +111,7 @@ function print_statements()
 
 		$debtor_row['order_'] = "";
 
-		$TransResult = getTransactions($debtor_row['debtor_no'], $date, $show_also_allocated);
+		$TransResult = getTransactions($debtor_row['debtor_no'], $start,  $date, $show_also_allocated);
 		$baccount = get_default_bank_account($debtor_row['curr_code']);
 		$params['bankaccount'] = $baccount['id'];
 		if (db_num_rows($TransResult) == 0)
@@ -131,25 +141,25 @@ function print_statements()
 		$rep->TextCol(0, 7, _("Overdue"));
 		$rep->fontSize -= 2;
 		$rep->NewLine(2);
-*/
+ */
 
-			$current = false;
-		$balance = 0;
+		$current = false;
+		$balance = getInitialBalance($debtor_row['debtor_no'], $start);
 		$overdue = 0;
 		while ($transaction_row=db_fetch($TransResult))
 		{
 			if(!$current && !$transaction_row['OverDue']==true) {
-		$rep->fontSize += 2;
+				$rep->fontSize += 2;
 				$rep->NewLine(2);
-		$rep->TextCol(0, 7, _("Due Soon"));
-		$rep->fontSize -= 2;
+				$rep->TextCol(0, 7, _("Due Soon"));
+				$rep->fontSize -= 2;
 				$current = true;
 				$overdue = $balance;
 				$balance = 0;
 				$rep->NewLine(2);
 			}
 
-		if($current)
+			if($current)
 				$rep->SetTextColor(0, 0, 190);
 
 
@@ -169,10 +179,10 @@ function print_statements()
 			else
 				$rep->TextCol(5, 6,	$DisplayTotal, -2);
 			if(!$current) {
-			if(Abs($balance) < 1e-6) $rep->SetTextColor(190, 190, 190);
-			else if($balance > 0) $rep->SetTextColor(190, 0, 0);
+				if(Abs($balance) < 1e-6) $rep->SetTextColor(190, 190, 190);
+				else if($balance > 0) $rep->SetTextColor(190, 0, 0);
 			}
-		  $rep->TextCol(6, 7,	number_format2(-$balance, $dec), -2);
+			$rep->TextCol(6, 7,	number_format2(-$balance, $dec), -2);
 			$rep->SetTextColor(0, 0, 0);
 
 			$rep->NewLine();
@@ -183,22 +193,22 @@ function print_statements()
 		// Total
 		$rep->NewLine();
 		$rep->SetTextColor(0, 0, 0);
-			$rep->fontSize += 2;
+		$rep->fontSize += 2;
 		$rep->TextCol(5,6,'Total Balance');
 		$rep->TextCol(6,7, number_format2(-($balance+$overdue), $dec));
 		if ($overdue > 0) {
 			$rep->fontSize += 2;
-				$rep->NewLine(2);
+			$rep->NewLine(2);
 			$rep->SetTextColor(190, 0, 0);
-		$rep->TextCol(5,6,'Overdue');
-		$rep->TextCol(6,7,number_format2($overdue, $dec));
+			$rep->TextCol(5,6,'Overdue');
+			$rep->TextCol(6,7,number_format2($overdue, $dec));
 			$rep->TextCol(2,5, 'PLEASE PAY NOW');
 			$rep->fontSize -= 4;
 			$rep->SetTextColor(0, 0, 0);
-		$rep->NewLine();
+			$rep->NewLine();
 		}
-			$rep->fontSize -= 2;
-		
+		$rep->fontSize -= 2;
+
 
 /*
 		$nowdue = "1-" . $PastDueDays1 . " " . _("Days");
@@ -219,7 +229,7 @@ function print_statements()
 		$rep->NewLine();
 		for ($i = 0; $i < 5; $i++)
 			$rep->TextWrap($col[$i], $rep->row, $col[$i + 1] - $col[$i], $str2[$i], 'right');
-*/
+ */
 		if ($email == 1)
 			$rep->End($email, _("Statement") . " " . _("as of") . " " . sql2date($date));
 
