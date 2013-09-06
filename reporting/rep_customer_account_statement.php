@@ -37,7 +37,8 @@ function getTransactions($debtorno, $date, $show_also_allocated)
 				".TB_PREF."debtor_trans.ov_freight_tax + ".TB_PREF."debtor_trans.ov_discount)*if(".TB_PREF."debtor_trans.type in (".ST_SALESINVOICE."), 1, -1)
 				AS TotalAmount, ".TB_PREF."debtor_trans.alloc AS Allocated,
 				((".TB_PREF."debtor_trans.type = ".ST_SALESINVOICE.")
-				AND ".TB_PREF."debtor_trans.due_date < '$date') AS OverDue
+				AND ".TB_PREF."debtor_trans.due_date < '$date') AS OverDue,
+				IF(due_date = '0000-00-00' , tran_date, due_date) AS EffectiveDate
 				FROM ".TB_PREF."debtor_trans
 				WHERE ".TB_PREF."debtor_trans.tran_date <= '$date' AND ".TB_PREF."debtor_trans.debtor_no = ".db_escape($debtorno)."
     				AND ".TB_PREF."debtor_trans.type <> ".ST_CUSTDELIVERY."
@@ -66,7 +67,7 @@ function print_statements()
 	$orientation = ($orientation ? 'L' : 'P');
 	$dec = user_price_dec();
 
-	$cols = array(4, 100, 130, 190,	250, 320, 385, 450, 515);
+	$cols = array(4, 64, 180,	250, 320, 385, 450, 515);
 
 	//$headers in doctext.inc
 
@@ -136,18 +137,16 @@ function print_statements()
 
 			$balance +=  $transaction_row["TotalAmount"];
 
-			$rep->TextCol(0, 1, $systypes_array[$transaction_row['type']], -2);
-			$rep->TextCol(1, 2,	$transaction_row['reference'], -2);
-			$rep->TextCol(2, 3,	sql2date($transaction_row['tran_date']), -2);
+			$rep->TextCol(1, 1, $systypes_array[$transaction_row['type']], -2);
+			$rep->TextCol(2, 2,	$transaction_row['reference'], -2);
+			$rep->TextCol(0, 3,	sql2date($transaction_row['EffectiveDate']), -2);
 			if ($transaction_row['type'] == ST_SALESINVOICE)
 				$rep->TextCol(3, 4,	sql2date($transaction_row['due_date']), -2);
 			if ($transaction_row['type'] == ST_SALESINVOICE || $transaction_row['type'] == ST_BANKPAYMENT)
 				$rep->TextCol(4, 5,	$DisplayTotal, -2);
 			else
 				$rep->TextCol(5, 6,	$DisplayTotal, -2);
-			$rep->TextCol(6, 7,	$DisplayAlloc, -2);
-		  #$rep->TextCol(7, 8,	$DisplayNet, -2);
-		  $rep->TextCol(7, 8,	number_format2(-$balance, $dec), -2);
+		  $rep->TextCol(6, 7,	number_format2(-$balance, $dec), -2);
 
 			$rep->NewLine();
 			if ($rep->row < $rep->bottomMargin + (10 * $rep->lineHeight))
