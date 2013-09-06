@@ -225,20 +225,26 @@ function print_statements()
 				$rep->NewPage();
 		}
 
+		if(!$current)  {
+				$overdue = $balance;
+				$balance = 0;
+		}
+
 		// Total
 		$rep->NewLine();
 		$rep->SetTextColor(0, 0, 0);
 		$rep->fontSize += 2;
 		$rep->TextCol(5,6,'Total Balance');
 		$rep->TextCol(6,7, number_format2(-($balance+$overdue), $dec));
+
 		if ($overdue > 0) {
-			$rep->fontSize += 2;
+		 // $rep->fontSize += 2;
 			$rep->NewLine(2);
 			$rep->SetTextColor(190, 0, 0);
 			$rep->TextCol(5,6,'Overdue');
 			$rep->TextCol(6,7,number_format2($overdue, $dec));
 			$rep->TextCol(2,5, 'PLEASE PAY NOW');
-			$rep->fontSize -= 4;
+		//	$rep->fontSize -= 2;
 			$rep->SetTextColor(0, 0, 0);
 			$rep->NewLine();
 		}
