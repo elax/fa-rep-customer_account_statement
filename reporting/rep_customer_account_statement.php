@@ -31,7 +31,7 @@ print_statements();
 //----------------------------------------------------------------------------------------------------
 function amountSQL() {
 		return "(".TB_PREF."debtor_trans.ov_amount + ".TB_PREF."debtor_trans.ov_gst + ".TB_PREF."debtor_trans.ov_freight +
-				".TB_PREF."debtor_trans.ov_freight_tax + ".TB_PREF."debtor_trans.ov_discount)*IF(".TB_PREF."debtor_trans.type in (".ST_SALESINVOICE."), 1, -1)"; 
+				".TB_PREF."debtor_trans.ov_freight_tax + ".TB_PREF."debtor_trans.ov_discount)*IF(".TB_PREF."debtor_trans.type in (".ST_SALESINVOICE.", ".ST_BANKPAYMENT."), 1, -1)"; 
 }
 
 function findLatestNullDate($debtorno, $default) {
