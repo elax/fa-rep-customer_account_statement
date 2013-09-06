@@ -34,7 +34,7 @@ function getTransactions($debtorno, $date, $show_also_allocated)
 {
     $sql = "SELECT ".TB_PREF."debtor_trans.*,
 				(".TB_PREF."debtor_trans.ov_amount + ".TB_PREF."debtor_trans.ov_gst + ".TB_PREF."debtor_trans.ov_freight +
-				".TB_PREF."debtor_trans.ov_freight_tax + ".TB_PREF."debtor_trans.ov_discount)
+				".TB_PREF."debtor_trans.ov_freight_tax + ".TB_PREF."debtor_trans.ov_discount)*if(".TB_PREF."debtor_trans.type in (".ST_SALESINVOICE."), 1, -1)
 				AS TotalAmount, ".TB_PREF."debtor_trans.alloc AS Allocated,
 				((".TB_PREF."debtor_trans.type = ".ST_SALESINVOICE.")
 				AND ".TB_PREF."debtor_trans.due_date < '$date') AS OverDue
@@ -43,10 +43,7 @@ function getTransactions($debtorno, $date, $show_also_allocated)
     				AND ".TB_PREF."debtor_trans.type <> ".ST_CUSTDELIVERY."
 					AND ABS(".TB_PREF."debtor_trans.ov_amount + ".TB_PREF."debtor_trans.ov_gst + ".TB_PREF."debtor_trans.ov_freight +
 				".TB_PREF."debtor_trans.ov_freight_tax + ".TB_PREF."debtor_trans.ov_discount) > 1e-6";
-	if (!$show_also_allocated)
-		$sql .= " AND ABS (ABS(".TB_PREF."debtor_trans.ov_amount + ".TB_PREF."debtor_trans.ov_gst + ".TB_PREF."debtor_trans.ov_freight +
-				".TB_PREF."debtor_trans.ov_freight_tax + ".TB_PREF."debtor_trans.ov_discount) - alloc) > 1e-6";
-	$sql .= " ORDER BY ".TB_PREF."debtor_trans.tran_date";
+	$sql .= " ORDER BY IF(due_date = '0000-00-00' , tran_date, due_date)";
 
     return db_query($sql,"No transactions were returned");
 }
@@ -93,14 +90,14 @@ function print_statements()
 		$sql .= " ORDER by name";
 	$result = db_query($sql, "The customers could not be retrieved");
 
-	while ($myrow=db_fetch($result))
+	while ($debtor_row=db_fetch($result))
 	{
 		$date = date('Y-m-d');
 
-		$myrow['order_'] = "";
+		$debtor_row['order_'] = "";
 
-		$TransResult = getTransactions($myrow['debtor_no'], $date, $show_also_allocated);
-		$baccount = get_default_bank_account($myrow['curr_code']);
+		$TransResult = getTransactions($debtor_row['debtor_no'], $date, $show_also_allocated);
+		$baccount = get_default_bank_account($debtor_row['curr_code']);
 		$params['bankaccount'] = $baccount['id'];
 		if (db_num_rows($TransResult) == 0)
 			continue;
@@ -108,43 +105,50 @@ function print_statements()
 		{
 			$rep = new FrontReport("", "", user_pagesize(), 9, $orientation);
 			$rep->title = _('STATEMENT');
-			$rep->filename = "Statement" . $myrow['debtor_no'] . ".pdf";
+			$rep->filename = "Statement" . $debtor_row['debtor_no'] . ".pdf";
 			$rep->Info($params, $cols, null, $aligns);
 		}
 
-		$rep->filename = "MAE-ST-" . strtr($myrow['DebtorName'], " '", "__") ."--" . strtr(Today(), "/", "-") . ".pdf";
-		$contacts = get_customer_contacts($myrow['debtor_no'], 'invoice');
+		$rep->filename = "MAE-ST-" . strtr($debtor_row['DebtorName'], " '", "__") ."--" . strtr(Today(), "/", "-") . ".pdf";
+		$contacts = get_customer_contacts($debtor_row['debtor_no'], 'invoice');
 		$rep->SetHeaderType('Header2');
 		$rep->currency = $cur;
 		$rep->Font();
 		$rep->Info($params, $cols, null, $aligns);
 
 		//= get_branch_contacts($branch['branch_code'], 'invoice', $branch['debtor_no']);
-		$rep->SetCommonData($myrow, null, null, $baccount, ST_STATEMENT, $contacts);
+		$rep->SetCommonData($debtor_row, null, null, $baccount, ST_STATEMENT, $contacts);
 		$rep->NewPage();
 		$rep->NewLine();
 		$doctype = ST_STATEMENT;
 		$rep->fontSize += 2;
-		$rep->TextCol(0, 8, _("Outstanding Transactions"));
+		$rep->TextCol(0, 8, _("Transactions"));
 		$rep->fontSize -= 2;
 		$rep->NewLine(2);
-		while ($myrow2=db_fetch($TransResult))
-		{
-			$DisplayTotal = number_format2(Abs($myrow2["TotalAmount"]),$dec);
-			$DisplayAlloc = number_format2($myrow2["Allocated"],$dec);
-			$DisplayNet = number_format2($myrow2["TotalAmount"] - $myrow2["Allocated"],$dec);
 
-			$rep->TextCol(0, 1, $systypes_array[$myrow2['type']], -2);
-			$rep->TextCol(1, 2,	$myrow2['reference'], -2);
-			$rep->TextCol(2, 3,	sql2date($myrow2['tran_date']), -2);
-			if ($myrow2['type'] == ST_SALESINVOICE)
-				$rep->TextCol(3, 4,	sql2date($myrow2['due_date']), -2);
-			if ($myrow2['type'] == ST_SALESINVOICE || $myrow2['type'] == ST_BANKPAYMENT)
+		$balance = 0;
+		while ($transaction_row=db_fetch($TransResult))
+		{
+
+			$DisplayTotal = number_format2(Abs($transaction_row["TotalAmount"]),$dec);
+			$DisplayAlloc = number_format2($transaction_row["Allocated"],$dec);
+			$DisplayNet = number_format2($transaction_row["TotalAmount"] - $transaction_row["Allocated"],$dec);
+
+			$balance +=  $transaction_row["TotalAmount"];
+
+			$rep->TextCol(0, 1, $systypes_array[$transaction_row['type']], -2);
+			$rep->TextCol(1, 2,	$transaction_row['reference'], -2);
+			$rep->TextCol(2, 3,	sql2date($transaction_row['tran_date']), -2);
+			if ($transaction_row['type'] == ST_SALESINVOICE)
+				$rep->TextCol(3, 4,	sql2date($transaction_row['due_date']), -2);
+			if ($transaction_row['type'] == ST_SALESINVOICE || $transaction_row['type'] == ST_BANKPAYMENT)
 				$rep->TextCol(4, 5,	$DisplayTotal, -2);
 			else
 				$rep->TextCol(5, 6,	$DisplayTotal, -2);
 			$rep->TextCol(6, 7,	$DisplayAlloc, -2);
-			$rep->TextCol(7, 8,	$DisplayNet, -2);
+		  #$rep->TextCol(7, 8,	$DisplayNet, -2);
+		  $rep->TextCol(7, 8,	number_format2(-$balance, $dec), -2);
+
 			$rep->NewLine();
 			if ($rep->row < $rep->bottomMargin + (10 * $rep->lineHeight))
 				$rep->NewPage();
@@ -152,7 +156,7 @@ function print_statements()
 		$nowdue = "1-" . $PastDueDays1 . " " . _("Days");
 		$pastdue1 = $PastDueDays1 + 1 . "-" . $PastDueDays2 . " " . _("Days");
 		$pastdue2 = _("Over") . " " . $PastDueDays2 . " " . _("Days");
-		$CustomerRecord = get_customer_details($myrow['debtor_no'], null, $show_also_allocated);
+		$CustomerRecord = get_customer_details($debtor_row['debtor_no'], null, $show_also_allocated);
 		$str = array(_("Current"), $nowdue, $pastdue1, $pastdue2, _("Total Balance"));
 		$str2 = array(number_format2(($CustomerRecord["Balance"] - $CustomerRecord["Due"]),$dec),
 			number_format2(($CustomerRecord["Due"]-$CustomerRecord["Overdue1"]),$dec),
