@@ -168,7 +168,12 @@ function print_statements()
 				$rep->TextCol(4, 5,	$DisplayTotal, -2);
 			else
 				$rep->TextCol(5, 6,	$DisplayTotal, -2);
+			if(!$current) {
+			if(Abs($balance) < 1e-6) $rep->SetTextColor(190, 190, 190);
+			else if($balance > 0) $rep->SetTextColor(190, 0, 0);
+			}
 		  $rep->TextCol(6, 7,	number_format2(-$balance, $dec), -2);
+			$rep->SetTextColor(0, 0, 0);
 
 			$rep->NewLine();
 			if ($rep->row < $rep->bottomMargin + (10 * $rep->lineHeight))
