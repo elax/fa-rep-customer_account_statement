@@ -158,7 +158,7 @@ function print_statements()
 			$rep->Info($params, $cols, null, $aligns);
 		}
 
-		$rep->filename = "MAE-ST-" . strtr($debtor_row['DebtorName'], " '", "__") ."--" . strtr(Today(), "/", "-") . ".pdf";
+		$rep->filename = "ST-" . strtr($debtor_row['DebtorName'], " '", "__") ."--" . strtr(Today(), "/", "-") . ".pdf";
 		$contacts = get_customer_contacts($debtor_row['debtor_no'], 'invoice');
 		$rep->SetHeaderType('Header2');
 		$rep->currency = $cur;
