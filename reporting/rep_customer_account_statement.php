@@ -69,7 +69,7 @@ function getTransactions($debtorno, $from,  $date)
 		".amountSQL()."
 		AS TotalAmount, ".TB_PREF."debtor_trans.alloc AS Allocated,
 		((".TB_PREF."debtor_trans.type != ".ST_SALESINVOICE.")
-		OR ".TB_PREF."debtor_trans.due_date < '$date') AS OverDue,
+		OR ".TB_PREF."debtor_trans.due_date <= '$date') AS OverDue,
 		IF(due_date = '0000-00-00' , tran_date, due_date) AS EffectiveDate
 		FROM ".TB_PREF."debtor_trans
 		WHERE GREATEST(".TB_PREF."debtor_trans.tran_date, ".TB_PREF."debtor_trans.due_date) >= '$from' AND ".TB_PREF."debtor_trans.debtor_no = ".db_escape($debtorno)."
