@@ -180,7 +180,7 @@ function print_statements()
 		$balance = getInitialBalance($debtor_row['debtor_no'], $start);
 		if(true || Abs($balance) > 1e-6) {
 			// Display initial balance
-			$rep->TextCol(1, 4, 'Balance Brough Forward');
+			$rep->TextCol(1, 4, 'Balance Brought Forward');
 				if(Abs($balance) < 1e-6) $rep->SetTextColor(190, 190, 190);
 				else if($balance > 0) $rep->SetTextColor(190, 0, 0);
 			$rep->TextCol(6, 7,	number_format2(-$balance, $dec), -2);
