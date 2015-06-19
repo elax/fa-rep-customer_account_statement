@@ -34,13 +34,16 @@ function amountSQL() {
 				".TB_PREF."debtor_trans.ov_freight_tax + ".TB_PREF."debtor_trans.ov_discount)*IF(".TB_PREF."debtor_trans.type in (".ST_SALESINVOICE.", ".ST_BANKPAYMENT."), 1, -1)"; 
 }
 
-function findLatestNullDate($debtorno, $default) {
+function findLatestNullDate($debtorno, $default, $max_date) {
 	db_query("SELECT @balance:=0");
-	$sql = "SELECT MAX(date)+ INTERVAL 1 DAY  AS date FROM ( SELECT @balance := @balance+".amountSQL()." AS balance,
-					GREATEST(tran_date, due_date) AS date
-					FROM   ".TB_PREF."debtor_trans WHERE ".TB_PREF."debtor_trans.debtor_no = ".db_escape($debtorno)."
-    				AND ".TB_PREF."debtor_trans.type <> ".ST_CUSTDELIVERY."
-					ORDER BY GREATEST(tran_date, due_date)
+    $sql = "SELECT MAX(date)+ INTERVAL 1 DAY  AS date
+            FROM ( SELECT @balance := @balance+".amountSQL()." AS balance,
+					     GREATEST(tran_date, due_date) AS date
+                   FROM   ".TB_PREF."debtor_trans
+                   WHERE ".TB_PREF."debtor_trans.debtor_no = ".db_escape($debtorno)."
+                   AND ".TB_PREF."debtor_trans.type <> ".ST_CUSTDELIVERY."
+                   AND dute_date <= ".$date."
+				   ORDER BY GREATEST(tran_date, due_date)
 					) b WHERE ABS(balance) < 1e-6
 		";
 
@@ -130,7 +133,7 @@ function print_statements()
 
 		if($from != $to) {
 			// find the latest point where the balance was null
-			$start = findLatestNullDate($debtor_row['debtor_no'], $from);
+			$start = findLatestNullDate($debtor_row['debtor_no'], $from, $to);
 			// but not earlier than the $to date.
 			if(date1_greater_date2(sql2date($start), sql2date($to))) {
 				$start = $to;
