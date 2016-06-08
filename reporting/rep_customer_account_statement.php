@@ -42,12 +42,12 @@ function findLatestNullDate($debtorno, $default, $max_date) {
                    FROM   ".TB_PREF."debtor_trans
                    WHERE ".TB_PREF."debtor_trans.debtor_no = ".db_escape($debtorno)."
                    AND ".TB_PREF."debtor_trans.type <> ".ST_CUSTDELIVERY."
-                   AND dute_date <= ".$date."
+                   AND due_date <= '".$max_date."'
 				   ORDER BY GREATEST(tran_date, due_date)
 					) b WHERE ABS(balance) < 1e-6
 		";
 
-		$result = db_query($sql);
+		$result = db_query($sql, $sql);
 		$row = db_fetch($result);
 		return $row ? $row['date'] : $default;
 	
