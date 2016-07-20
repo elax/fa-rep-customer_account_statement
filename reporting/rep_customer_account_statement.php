@@ -191,8 +191,21 @@ function print_statements()
 			$rep->NewLine();
 		}
 		$overdue = 0;
-		while ($transaction_row=db_fetch($TransResult))
+        $next_row = null; //used if a transaction needs to generate another row
+		while ($transaction_row= $next_row ?: db_fetch($TransResult))
 		{
+            $next_row =null;
+            // split payment with discount in two rows, original payment + discount
+        if ($transaction_row['type'] == ST_CUSTPAYMENT && $transaction_row['ov_discount'] != 0) {
+            // beware the discount is in opposite signe of the payment
+                $discount = ($transaction_row['ov_discount']); 
+                $next_row = $transaction_row;
+                $next_row['TotalAmount'] = -$discount;
+                $next_row['ov_discount'] = 0;
+                $next_row['EffectiveDate'] = "";
+                $transaction_row['TotalAmount'] += $discount;
+                $next_row['type'] = "PPDiscount";
+                }
 			if(!$current && !$transaction_row['OverDue']==true) {
 				$rep->fontSize += 2;
 				$rep->NewLine(2);
@@ -225,12 +238,15 @@ function print_statements()
 
 			$balance +=  $transaction_row["TotalAmount"];
 
-			$rep->TextCol(1, 1, $systypes_array[$transaction_row['type']], -2);
+            if(is_numeric($transaction_row['type']))
+                $rep->TextCol(1, 1, $systypes_array[$transaction_row['type']], -2);
+            else
+                $rep->TextCol(1, 1, $transaction_row['type'], -2);
 			$rep->TextCol(2, 2,	$transaction_row['reference'], -2);
 			$rep->TextCol(0, 3,	sql2date($transaction_row['EffectiveDate']), -2);
 			if ($transaction_row['type'] == ST_SALESINVOICE)
 				$rep->TextCol(3, 4,	sql2date($transaction_row['tran_date']), -2);
-			if ($transaction_row['type'] == ST_SALESINVOICE || $transaction_row['type'] == ST_BANKPAYMENT)
+			if ($transaction_row['type'] == ST_SALESINVOICE || $transaction_row['type'] == 300) // ST_BANKPAYMENT)
 				$rep->TextCol(4, 5,	$DisplayTotal, -2);
 			else
 				$rep->TextCol(5, 6,	$DisplayTotal, -2);
